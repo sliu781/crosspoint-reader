@@ -1,6 +1,7 @@
 #include "ChapterHtmlSlimParser.h"
 
 #include <FsHelpers.h>
+#include <fontIds.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -667,14 +668,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     preBlockStyle.textAlignDefined = true;
     preBlockStyle.alignment = CssTextAlign::Left;
     preBlockStyle.paddingLeft = 8;
+    preBlockStyle.overrideFontId = SFMONO_12_FONT_ID;
     self->startNewTextBlock(preBlockStyle);
     self->preDepth = self->depth;
-    StyleStackEntry preEntry;
-    preEntry.depth = self->depth;
-    preEntry.hasItalic = true;
-    preEntry.italic = true;
-    self->inlineStyleStack.push_back(preEntry);
-    self->updateEffectiveInlineStyle();
+    // No italic: code blocks use SF Mono, not italicised body font
   } else if (strcmp(name, "code") == 0 || strcmp(name, "tt") == 0 || strcmp(name, "kbd") == 0 ||
              strcmp(name, "samp") == 0) {
     if (self->partWordBufferIndex > 0) {
@@ -683,8 +680,12 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     StyleStackEntry codeEntry;
     codeEntry.depth = self->depth;
-    codeEntry.hasItalic = true;
-    codeEntry.italic = true;
+    if (self->preDepth < 0) {
+      // Inline code outside <pre>: use italic as a visual cue
+      codeEntry.hasItalic = true;
+      codeEntry.italic = true;
+    }
+    // Inside <pre>: no italic — the code font (overrideFontId) already distinguishes it
     self->inlineStyleStack.push_back(codeEntry);
     self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {

@@ -30,6 +30,9 @@ struct BlockStyle {
   bool textIndentDefined = false;  // true if text-indent was explicitly set in CSS
   bool textAlignDefined = false;   // true if text-align was explicitly set in CSS
 
+  // Non-zero overrides the page-level font ID for this block (used for code fonts).
+  int overrideFontId = 0;
+
   // Combined horizontal insets (margin + padding)
   [[nodiscard]] int16_t leftInset() const { return marginLeft + paddingLeft; }
   [[nodiscard]] int16_t rightInset() const { return marginRight + paddingRight; }
@@ -65,6 +68,8 @@ struct BlockStyle {
       combinedBlockStyle.alignment = alignment;
       combinedBlockStyle.textAlignDefined = textAlignDefined;
     }
+    // Font override: child's wins if set, otherwise inherit parent's
+    combinedBlockStyle.overrideFontId = child.overrideFontId != 0 ? child.overrideFontId : overrideFontId;
     return combinedBlockStyle;
   }
 

@@ -97,23 +97,25 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     return;
   }
 
+  // Use the block's font override (e.g. code font for <pre>) for layout measurement.
+  const int effectiveFontId = blockStyle.overrideFontId != 0 ? blockStyle.overrideFontId : fontId;
+
   // Apply fixed transforms before any per-line layout work.
   applyParagraphIndent();
 
   const int pageWidth = viewportWidth;
-  auto wordWidths = calculateWordWidths(renderer, fontId);
+  auto wordWidths = calculateWordWidths(renderer, effectiveFontId);
 
   std::vector<size_t> lineBreakIndices;
   if (hyphenationEnabled) {
-    // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
-    lineBreakIndices = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
+    lineBreakIndices = computeHyphenatedLineBreaks(renderer, effectiveFontId, pageWidth, wordWidths, wordContinues);
   } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues);
+    lineBreakIndices = computeLineBreaks(renderer, effectiveFontId, pageWidth, wordWidths, wordContinues);
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
-    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, fontId);
+    extractLine(i, pageWidth, wordWidths, wordContinues, lineBreakIndices, processLine, renderer, effectiveFontId);
   }
 
   // Remove consumed words so size() reflects only remaining words
