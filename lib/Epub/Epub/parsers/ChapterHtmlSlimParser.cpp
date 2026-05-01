@@ -224,6 +224,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
   }
 
   if (self->tableDepth == 1 && strcmp(name, "tr") == 0) {
+    if (self->tableRowIndex > 0) {
+      // Blank separator line between rows for readability.
+      if (self->partWordBufferIndex > 0) self->flushPartWordBuffer();
+      self->startNewTextBlock(BlockStyle());
+    }
     self->tableRowIndex += 1;
     self->tableColIndex = 0;
     self->depth += 1;
@@ -239,30 +244,16 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     auto tableCellBlockStyle = BlockStyle();
     tableCellBlockStyle.textAlignDefined = true;
     const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
-                           ? CssTextAlign::Justify
+                           ? CssTextAlign::Left
                            : static_cast<CssTextAlign>(self->paragraphAlignment);
-    tableCellBlockStyle.alignment = align;
+    tableCellBlockStyle.paddingLeft = self->tableColIndex > 1 ? 16 : 0;
     self->startNewTextBlock(tableCellBlockStyle);
 
-    const std::string headerText =
-        "Tab Row " + std::to_string(self->tableRowIndex) + ", Cell " + std::to_string(self->tableColIndex) + ":";
-    StyleStackEntry headerStyle;
-    headerStyle.depth = self->depth;
-    headerStyle.hasBold = true;
-    headerStyle.bold = false;
-    headerStyle.hasItalic = true;
-    headerStyle.italic = true;
-    headerStyle.hasUnderline = true;
-    headerStyle.underline = false;
-    self->inlineStyleStack.push_back(headerStyle);
-    self->updateEffectiveInlineStyle();
-    self->characterData(userData, headerText.c_str(), static_cast<int>(headerText.length()));
-    if (self->partWordBufferIndex > 0) {
-      self->flushPartWordBuffer();
+    // Header cells (<th>) are rendered bold.
+    if (strcmp(name, "th") == 0) {
+      self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
+      self->updateEffectiveInlineStyle();
     }
-    self->nextWordContinues = false;
-    self->inlineStyleStack.pop_back();
-    self->updateEffectiveInlineStyle();
 
     self->depth += 1;
     return;
@@ -1003,6 +994,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
   }
 
   if (self->tableDepth == 1 && (strcmp(name, "td") == 0 || strcmp(name, "th") == 0)) {
+    if (strcmp(name, "th") == 0 && self->boldUntilDepth == self->depth) {
+      self->boldUntilDepth = INT_MAX;
+    }
     self->nextWordContinues = false;
   }
 
