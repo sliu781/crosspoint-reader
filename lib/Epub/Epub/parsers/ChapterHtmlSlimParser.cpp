@@ -573,6 +573,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->startNewTextBlock(headerBlockStyle);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "hr") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    // Emit the <hr> as a full-width line of hyphens in its own block.
+    // Approximate character width: 8px. The resulting string may be wider
+    // than the viewport for large fonts; the line-breaker will wrap it.
+    self->startNewTextBlock(userAlignmentBlockStyle);
+    const int approxCharWidthPx = 8;
+    const int count = std::max(8, self->viewportWidth / approxCharWidthPx);
+    self->currentTextBlock->addWord(std::string(count, '-'), EpdFontFamily::REGULAR);
+    // Start a fresh block so content after the <hr> begins on a new line.
+    self->startNewTextBlock(userAlignmentBlockStyle);
   } else if (matches(name, BLOCK_TAGS, NUM_BLOCK_TAGS)) {
     if (strcmp(name, "br") == 0) {
       if (self->partWordBufferIndex > 0) {
@@ -655,6 +668,34 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inlineStyleStack.push_back(entry);
     self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "pre") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+    }
+    auto preBlockStyle = BlockStyle();
+    preBlockStyle.textAlignDefined = true;
+    preBlockStyle.alignment = CssTextAlign::Left;
+    preBlockStyle.paddingLeft = 8;
+    self->startNewTextBlock(preBlockStyle);
+    self->preDepth = self->depth;
+    StyleStackEntry preEntry;
+    preEntry.depth = self->depth;
+    preEntry.hasItalic = true;
+    preEntry.italic = true;
+    self->inlineStyleStack.push_back(preEntry);
+    self->updateEffectiveInlineStyle();
+  } else if (strcmp(name, "code") == 0 || strcmp(name, "tt") == 0 || strcmp(name, "kbd") == 0 ||
+             strcmp(name, "samp") == 0) {
+    if (self->partWordBufferIndex > 0) {
+      self->flushPartWordBuffer();
+      self->nextWordContinues = true;
+    }
+    StyleStackEntry codeEntry;
+    codeEntry.depth = self->depth;
+    codeEntry.hasItalic = true;
+    codeEntry.italic = true;
+    self->inlineStyleStack.push_back(codeEntry);
+    self->updateEffectiveInlineStyle();
   } else if (strcmp(name, "span") == 0 || !isHeaderOrBlock(name)) {
     // Handle span and other inline elements for CSS styling
     if (cssStyle.hasFontWeight() || cssStyle.hasFontStyle() || cssStyle.hasTextDecoration()) {
@@ -725,6 +766,34 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
       self->currentFootnote.number[self->currentFootnoteLinkTextLen++] = s[i];
     }
     self->currentFootnote.number[self->currentFootnoteLinkTextLen] = '\0';
+  }
+
+  // Inside <pre>: preserve newlines as paragraph breaks; collapse spaces and tabs as word separators.
+  // This ensures each line of a code block renders on its own line instead of running together.
+  if (self->preDepth >= 0) {
+    for (int i = 0; i < len; i++) {
+      if (s[i] == '\r') continue;
+      if (s[i] == '\n') {
+        if (self->partWordBufferIndex > 0) {
+          self->flushPartWordBuffer();
+        }
+        self->nextWordContinues = false;
+        const auto lineStyle = self->currentTextBlock->getBlockStyle();
+        self->startNewTextBlock(lineStyle);
+      } else if (s[i] == ' ' || s[i] == '\t') {
+        if (self->partWordBufferIndex > 0) {
+          self->flushPartWordBuffer();
+          self->nextWordContinues = false;
+        }
+      } else {
+        if (self->partWordBufferIndex >= MAX_WORD_SIZE) {
+          self->flushPartWordBuffer();
+          self->nextWordContinues = true;
+        }
+        self->partWordBuffer[self->partWordBufferIndex++] = s[i];
+      }
+    }
+    return;
   }
 
   for (int i = 0; i < len; i++) {
@@ -946,6 +1015,18 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableRowIndex = 0;
     self->tableColIndex = 0;
     self->nextWordContinues = false;
+  }
+
+  if (strcmp(name, "pre") == 0 && self->preDepth == self->depth) {
+    self->preDepth = -1;
+    // Start a fresh block so text after </pre> uses the normal paragraph alignment
+    auto postPreStyle = BlockStyle();
+    postPreStyle.textAlignDefined = true;
+    const auto align = (self->paragraphAlignment == static_cast<uint8_t>(CssTextAlign::None))
+                           ? CssTextAlign::Justify
+                           : static_cast<CssTextAlign>(self->paragraphAlignment);
+    postPreStyle.alignment = align;
+    self->startNewTextBlock(postPreStyle);
   }
 
   // Leaving bold tag

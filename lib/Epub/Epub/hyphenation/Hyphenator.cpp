@@ -215,6 +215,18 @@ std::vector<Hyphenator::BreakInfo> Hyphenator::breakOffsets(const std::string& w
     if (hasApostropheLikeSeparator) {
       appendApostropheContractionBreaks(cps, explicitBreakInfos);
     }
+    if (includeFallback) {
+      // When a token has explicit break points (e.g. hyphens or slashes in a
+      // file path) but every segment between them is still too wide to fit on a
+      // line, character-level breaks let the line-breaker split within those
+      // segments.  Without this, "/nix/store/<64-char-hash>-pkg/bin" would clip
+      // at the viewport edge instead of wrapping.
+      const size_t minPrefix = hyphenator ? hyphenator->minPrefix() : LiangWordConfig::kDefaultMinPrefix;
+      const size_t minSuffix = hyphenator ? hyphenator->minSuffix() : LiangWordConfig::kDefaultMinSuffix;
+      for (size_t idx = minPrefix; idx + minSuffix <= cps.size(); ++idx) {
+        explicitBreakInfos.push_back({byteOffsetForIndex(cps, idx), true});
+      }
+    }
     // Merge all break points into ascending byte-offset order.
     sortAndDedupeBreakInfos(explicitBreakInfos);
     return explicitBreakInfos;

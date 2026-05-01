@@ -69,6 +69,7 @@ class ChapterHtmlSlimParser {
   int tableDepth = 0;
   int tableRowIndex = 0;
   int tableColIndex = 0;
+  int preDepth = -1;  // >= 0 when inside <pre>; tracks the depth at which <pre> opened
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on
   int completedPageCount = 0;

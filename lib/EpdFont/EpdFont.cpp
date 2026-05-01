@@ -172,6 +172,26 @@ const EpdGlyph* EpdFont::getGlyph(const uint32_t cp) const {
   }
 
   if (cp != REPLACEMENT_GLYPH) {
+    // Map Unicode characters that aren't in the font to ASCII approximations
+    // before falling back to the ??? replacement glyph.
+    if (cp >= 0x2500 && cp <= 0x257F) {
+      // Box-drawing characters: classify by visual orientation.
+      // Purely horizontal lines → '-', purely vertical lines → '|', all others → '+'
+      switch (cp) {
+        case 0x2500: case 0x2501:                          // ─ ━
+        case 0x2504: case 0x2505: case 0x2506: case 0x2507: // ┄ ┅ ┆ ┇
+        case 0x2508: case 0x2509: case 0x250A: case 0x250B: // ┈ ┉ ┊ ┋ (last two are vertical dashes but look similar)
+        case 0x254C: case 0x254D:                          // ╌ ╍
+        case 0x2550:                                       // ═
+          return getGlyph('-');
+        case 0x2502: case 0x2503:                          // │ ┃
+        case 0x254E: case 0x254F:                          // ╎ ╏
+        case 0x2551:                                       // ║
+          return getGlyph('|');
+        default:
+          return getGlyph('+');
+      }
+    }
     return getGlyph(REPLACEMENT_GLYPH);
   }
   return nullptr;
